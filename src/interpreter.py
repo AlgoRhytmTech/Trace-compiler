@@ -1,3 +1,5 @@
+from builtins import len
+
 from .ast import *
 
 
@@ -62,6 +64,10 @@ class Interpreter:
     def __init__(self):
         self.globals = Environment()
         self.globals.define("input", input)
+        self.globals.define("range",range)
+        self.globals.define("len",len)
+        
+
         self.env = self.globals
 
     def interpret(self, node):
