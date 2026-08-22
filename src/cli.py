@@ -93,5 +93,5 @@ def main(argv = None):
     print("My compiler started")
     print(f"Source file: {source}")
     print(f"Output file: {output}")
-    print("Phase 2 ready, lexer imported successfully")
+    print("Phase 2 ready Baby")
     return 0
