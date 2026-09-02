@@ -1,0 +1,8 @@
+let x = 10;
+let y = 5;
+
+output(x + y);
+output(x - y);
+output(x * y);
+output(x / y);
+output(x % y);

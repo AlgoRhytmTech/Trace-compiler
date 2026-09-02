@@ -1,97 +1,119 @@
-from pathlib import Path
 import argparse
+
 from src.lexer import Lexer
 from src.parser import Parser
 from src.semantics import SemanticAnalyzer
-from src.interpreter import Interpreter
+from src.codegen import TraceIRLowerer
+from src.bytecode_compiler import BytecodeCompiler
+from src.vm import VM
+
+
+VERSION = "0.1.0"
 
 
 def build_parser():
     parser = argparse.ArgumentParser(
-        prog ='myc',
-        description="mera apna compiler "
+        prog="trace",
+        description="TRACE - Translational Runtime Analysis and Compilation Engine"
+    )
 
-    )
     parser.add_argument(
-        "source",
-        help="source file path"
-    )
-    parser.add_argument(
-        "-o","--output",
-        help="output file path"
-    )
-    parser.add_argument("--tokens",
-                        action="store_true",
-                        help="print tokens and stop"
-    )
-    parser.add_argument(
-        "--ast",
-        action="store_true",
-        help = "print ast and stop"
-    )
-    parser.add_argument(
-        "--check",
-        action ="store_true",
-        help = "run semantic analysis and stop"
+        "file",
+        nargs="?",
+        help="TRACE source file (.trc)"
     )
 
     parser.add_argument(
         "--run",
-        action = "store_true",
-        help = "run program"
+        action="store_true",
+        help="Run the TRACE program"
     )
+
+    parser.add_argument(
+        "--tokens",
+        action="store_true",
+        help="Show lexer tokens"
+    )
+
+    parser.add_argument(
+        "--ast",
+        action="store_true",
+        help="Show parsed AST"
+    )
+
+    parser.add_argument(
+        "--check",
+        action="store_true",
+        help="Run semantic analysis"
+    )
+
+    parser.add_argument(
+        "--version",
+        action="version",
+        version=f"TRACE {VERSION}"
+    )
+
     return parser
 
-def main(argv = None):
+
+def compile_source(filename):
+    with open(filename, "r") as file:
+        source = file.read()
+
+    tokens = Lexer(source).tokenize()
+    ast = Parser(tokens).parse()
+
+    analyzer = SemanticAnalyzer(filename)
+    diagnostics = analyzer.analyze(ast)
+
+    return source, tokens, ast, diagnostics
+
+
+def main():
     parser = build_parser()
-    args = parser.parse_args(argv)
+    args = parser.parse_args()
 
-    source = Path(args.source)
+    if not args.file:
+        parser.print_help()
+        return 0
 
-    if not source.exists():
-        fixed_source = Path(str(source).replace("exampels", "examples", 1))
-        if "exampels" in str(source) and fixed_source.exists():
-            source = fixed_source
-        else:
-            parser.error(f"Source file does not exist {source}")
-
-    text = source.read_text()
-
-    if args.output:
-        output = Path(args.output)
-    else:
-        output = source.with_suffix(".out")
-
+    try:
+        source, tokens, ast, diagnostics = compile_source(args.file)
+    except FileNotFoundError:
+        print(f"trace: file not found: {args.file}")
+        return 1
+    except Exception as e:
+        print(f"trace: {e}")
+        return 1
 
     if args.tokens:
-        lexer = Lexer(text)
-        tokens = lexer.tokenize()
         for token in tokens:
             print(token)
         return 0
 
     if args.ast:
-        tokens = Lexer(text).tokenize()
-        ast = Parser(tokens).parse()
         print(ast)
         return 0
 
     if args.check:
-        tokens = Lexer(text).tokenize()
-        ast = Parser(tokens).parse()
-        SemanticAnalyzer().analyze(ast)
+        if diagnostics.has_error:
+            diagnostics.print_all()
+            return 1
+
         print("Check passed")
         return 0
 
-    if args.run:
-        tokens = Lexer(text).tokenize()
-        ast = Parser(tokens).parse()
-        SemanticAnalyzer().analyze(ast)
-        Interpreter().interpret(ast)
-        return 0
+    if diagnostics.has_error:
+        diagnostics.print_all()
+        return 1
 
-    print("My compiler started")
-    print(f"Source file: {source}")
-    print(f"Output file: {output}")
-    print("Phase 2 ready Baby")
+    ir = TraceIRLowerer().lower(ast)
+    bytecode = BytecodeCompiler().compile(ir)
+
+    VM().run(bytecode)
+
     return 0
+
+
+if __name__ == "__main__":
+    main()

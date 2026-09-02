@@ -56,36 +56,37 @@ class Parser:
         if self.current_token().kind in ("EQ", "ADEQ", "MSEQ", "MULEQ", "DIVEQ", "MODEQ"):
             op = self.current_token().kind
             self.advance()
-            expr = AssignNode(expr, op, self.expr())
+            expr = AssignNode(expr, op, self.expr(), expr.line, expr.col)
         self.optional_semicolon()
-        return ExprStatementNode(expr)
+        return ExprStatementNode(expr, expr.line, expr.col)
 
     def let_statement(self):
-        self.eat("LET")
-        name = self.eat("IDENTIFIER").value
+        let_token = self.eat("LET")
+        name_token = self.eat("IDENTIFIER")
+        name = name_token.value
         value = None
         if self.current_token().kind == "EQ":
             self.advance()
             value = self.expr()
         self.optional_semicolon()
-        return LetNode(name, value)
+        return LetNode(name, value, let_token.line, let_token.col)
 
     def output_statement(self):
-        self.eat("OUTPUT")
+        output_token = self.eat("OUTPUT")
         values = self.argument_list()
         self.optional_semicolon()
-        return OutputNode(values)
+        return OutputNode(values, output_token.line, output_token.col)
 
     def return_statement(self):
-        self.eat("RETURN")
+        return_token = self.eat("RETURN")
         value = None
         if self.current_token().kind not in ("SEMICOLON", "RBRACK", "EOF"):
             value = self.expr()
         self.optional_semicolon()
-        return ReturnNode(value)
+        return ReturnNode(value, return_token.line, return_token.col)
 
     def if_statement(self):
-        self.eat("IF")
+        if_token = self.eat("IF")
         condition = self.condition()
         body = self.block()
         elifs = []
@@ -101,25 +102,27 @@ class Parser:
             self.advance()
             else_body = self.block()
 
-        return IfNode(condition, body, elifs, else_body)
+        return IfNode(condition, body, elifs, else_body, if_token.line, if_token.col)
 
     def while_statement(self):
-        self.eat("WHILE")
+        while_token = self.eat("WHILE")
         condition = self.condition()
         body = self.block()
-        return WhileNode(condition, body)
+        return WhileNode(condition, body, while_token.line, while_token.col)
 
     def for_statement(self):
-        self.eat("FOR")
-        name = self.eat("IDENTIFIER").value
+        for_token = self.eat("FOR")
+        name_token = self.eat("IDENTIFIER")
+        name = name_token.value
         self.eat("IN")
         iterable = self.expr()
         body = self.block()
-        return ForNode(name, iterable, body)
+        return ForNode(name, iterable, body, for_token.line, for_token.col)
 
     def function_statement(self):
-        self.eat("FUNCTION")
-        name = self.eat("IDENTIFIER").value
+        func_token = self.eat("FUNCTION")
+        name_token = self.eat("IDENTIFIER")
+        name = name_token.value
         self.eat("LPAREN")
         params = []
         if self.current_token().kind != "RPAREN":
@@ -129,10 +132,10 @@ class Parser:
                 params.append(self.eat("IDENTIFIER").value)
         self.eat("RPAREN")
         body = self.block()
-        return FunctionNode(name, params, body)
+        return FunctionNode(name, params, body, func_token.line, func_token.col)
 
     def block(self):
-        self.eat("LBRACK")
+        l_bracket_token = self.eat("LBRACK")
         statements = []
         while self.current_token().kind not in ("RBRACK", "EOF"):
             if self.current_token().kind == "SEMICOLON":
@@ -140,7 +143,9 @@ class Parser:
                 continue
             statements.append(self.statement())
         self.eat("RBRACK")
-        return BlockNode(statements)
+        return BlockNode(statements, l_bracket_token.line, l_bracket_token.col)
+       
+        
 
     def condition(self):
         if self.current_token().kind == "LPAREN":
@@ -175,7 +180,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.logical_xor()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -186,7 +191,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.logical_and()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -197,7 +202,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.equality()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -208,7 +213,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.comparison()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -219,7 +224,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.additive()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -230,7 +235,7 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.term()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
 
         return node
 
@@ -241,26 +246,31 @@ class Parser:
             token = self.current_token()
             self.advance()
             right = self.factor()
-            node = BinaryOpNode(node, token.kind, right)
+            node = BinaryOpNode(node, token.kind, right, node.line, node.col)
         return node
 
     def factor(self):
         token = self.current_token()
         if token.kind == "INC":
             self.advance()
-            return UnaryOpNode("PRE_INC", self.factor())
+            operand = self.factor()
+            return UnaryOpNode("PRE_INC", operand, token.line, token.col)
         if token.kind == "DEC":
             self.advance()
-            return UnaryOpNode("PRE_DEC", self.factor())
+            operand = self.factor()
+            return UnaryOpNode("PRE_DEC", operand, token.line, token.col)
         if token.kind == "ADD":
             self.advance()
-            return UnaryOpNode("ADD", self.factor())
+            operand = self.factor()
+            return UnaryOpNode("ADD", operand, token.line, token.col)
         if token.kind == "MINUS":
             self.advance()
-            return UnaryOpNode("MINUS", self.factor())
+            operand = self.factor()
+            return UnaryOpNode("MINUS", operand, token.line, token.col)
         if token.kind == "NOT":
             self.advance()
-            return UnaryOpNode("NOT", self.factor())
+            operand = self.factor()
+            return UnaryOpNode("NOT", operand, token.line, token.col)
         return self.call()
 
     def call(self):
@@ -268,30 +278,41 @@ class Parser:
         while self.current_token().kind in ("LPAREN", "INC", "DEC"):
             if self.current_token().kind == "LPAREN":
                 args = self.argument_list()
-                node = CallNode(node, args)
+                node = CallNode(node, args, node.line, node.col)
                 continue
             if self.current_token().kind == "INC":
                 self.advance()
-                node = UnaryOpNode("POST_INC", node)
+                node = UnaryOpNode("POST_INC", node, node.line, node.col)
                 continue
             self.advance()
-            node = UnaryOpNode("POST_DEC", node)
+            node = UnaryOpNode("POST_DEC", node, node.line, node.col)
         return node
 
     def primary(self):
         token = self.current_token()
         if token.kind == "NUMBER":
             self.advance()
-            return NumberNode(token.value)
+            return NumberNode(token.value, token.line, token.col)
         if token.kind == "STRING":
             self.advance()
-            return StringNode(token.value)
+            return StringNode(token.value, token.line, token.col)
+        if token.kind == "TRUE":
+            self.advance()
+            return BooleanNode(True, token.line, token.col)
+
+        if token.kind == "FALSE":
+            self.advance()
+            return BooleanNode(False, token.line, token.col)
+        if token.kind == "NULL":
+            self.advance()
+            return NullNode(token.line, token.col)
+        
         if token.kind == "IDENTIFIER":
             self.advance()
-            return IdentifierNode(token.value)
+            return IdentifierNode(token.value, token.line, token.col)
         if token.kind == "INPUT":
             self.advance()
-            return IdentifierNode(token.value)
+            return IdentifierNode(token.value, token.line, token.col)
 
         if token.kind == "LPAREN":
             self.advance()

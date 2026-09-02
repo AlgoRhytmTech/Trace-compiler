@@ -1,0 +1,12 @@
+
+
+fxn add(a){
+    let total = 0;
+    for i in range(1,a){
+        total+= i;
+    }
+    return total;
+}
+let result = add(11);
+
+output(result);

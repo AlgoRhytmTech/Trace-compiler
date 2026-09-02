@@ -1,0 +1,12 @@
+output(true);
+output(false);
+
+let x = true;
+output(!x);
+
+output(true == false);
+output(true != false);
+
+if (x) {
+    output("yes");
+}

@@ -1,9 +1,12 @@
 class ASTNode:
-    pass
+    def __init__(self, line: int = 0, col: int = 0):
+        self.line = line
+        self.col = col
 
 
 class ProgramNode(ASTNode):
-    def __init__(self, statements):
+    def __init__(self, statements, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.statements = statements
 
     def __repr__(self):
@@ -11,7 +14,8 @@ class ProgramNode(ASTNode):
 
 
 class LetNode(ASTNode):
-    def __init__(self, name, value):
+    def __init__(self, name, value, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.name = name
         self.value = value
 
@@ -20,7 +24,8 @@ class LetNode(ASTNode):
 
 
 class AssignNode(ASTNode):
-    def __init__(self, target, op, value):
+    def __init__(self, target, op, value, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.target = target
         self.op = op
         self.value = value
@@ -30,7 +35,8 @@ class AssignNode(ASTNode):
 
 
 class OutputNode(ASTNode):
-    def __init__(self, values):
+    def __init__(self, values, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.values = values
 
     def __repr__(self):
@@ -38,7 +44,8 @@ class OutputNode(ASTNode):
 
 
 class ReturnNode(ASTNode):
-    def __init__(self, value):
+    def __init__(self, value, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.value = value
 
     def __repr__(self):
@@ -46,7 +53,8 @@ class ReturnNode(ASTNode):
 
 
 class BlockNode(ASTNode):
-    def __init__(self, statements):
+    def __init__(self, statements, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.statements = statements
 
     def __repr__(self):
@@ -54,7 +62,8 @@ class BlockNode(ASTNode):
 
 
 class IfNode(ASTNode):
-    def __init__(self, condition, body, elifs=None, else_body=None):
+    def __init__(self, condition, body, elifs=None, else_body=None, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.condition = condition
         self.body = body
         self.elifs = elifs or []
@@ -65,7 +74,8 @@ class IfNode(ASTNode):
 
 
 class WhileNode(ASTNode):
-    def __init__(self, condition, body):
+    def __init__(self, condition, body, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.condition = condition
         self.body = body
 
@@ -74,7 +84,8 @@ class WhileNode(ASTNode):
 
 
 class ForNode(ASTNode):
-    def __init__(self, name, iterable, body):
+    def __init__(self, name, iterable, body, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.name = name
         self.iterable = iterable
         self.body = body
@@ -84,7 +95,8 @@ class ForNode(ASTNode):
 
 
 class FunctionNode(ASTNode):
-    def __init__(self, name, params, body):
+    def __init__(self, name, params, body, line: int = 0, col: int = 0):
+        super().__init__(line, col)
         self.name = name
         self.params = params
         self.body = body
@@ -94,7 +106,8 @@ class FunctionNode(ASTNode):
 
 
 class ExprStatementNode(ASTNode):
-    def __init__(self, expr):
+    def __init__(self, expr, line: int, col: int):
+        super().__init__(line, col)
         self.expr = expr
 
     def __repr__(self):
@@ -102,7 +115,8 @@ class ExprStatementNode(ASTNode):
 
 
 class NumberNode(ASTNode):
-    def __init__(self, value):
+    def __init__(self, value, line: int, col: int):
+        super().__init__(line, col)
         self.value = value
 
     def __repr__(self):
@@ -110,7 +124,8 @@ class NumberNode(ASTNode):
 
 
 class StringNode(ASTNode):
-    def __init__(self, value):
+    def __init__(self, value, line: int, col: int):
+        super().__init__(line, col)
         self.value = value
 
     def __repr__(self):
@@ -118,7 +133,8 @@ class StringNode(ASTNode):
 
 
 class IdentifierNode(ASTNode):
-    def __init__(self, value):
+    def __init__(self, value, line: int, col: int):
+        super().__init__(line, col)
         self.value = value
 
     def __repr__(self):
@@ -126,7 +142,8 @@ class IdentifierNode(ASTNode):
 
 
 class CallNode(ASTNode):
-    def __init__(self, callee, args):
+    def __init__(self, callee, args, line: int, col: int):
+        super().__init__(line, col)
         self.callee = callee
         self.args = args
 
@@ -135,7 +152,8 @@ class CallNode(ASTNode):
 
 
 class BinaryOpNode(ASTNode):
-    def __init__(self, left, op, right):
+    def __init__(self, left, op, right, line: int, col: int):
+        super().__init__(line, col)
         self.left = left
         self.op = op
         self.right = right
@@ -145,9 +163,26 @@ class BinaryOpNode(ASTNode):
 
 
 class UnaryOpNode(ASTNode):
-    def __init__(self, op, right):
+    def __init__(self, op, right, line: int, col: int):
+        super().__init__(line, col)
         self.op = op
         self.right = right
 
     def __repr__(self):
         return f"UnaryOp({self.op}, {self.right})"
+
+class BooleanNode(ASTNode):
+    def __init__(self, value, line: int, col: int):
+        super().__init__(line, col)
+        self.value = value
+
+    def __repr__(self):
+        return f"Boolean({self.value})"
+
+class NullNode(ASTNode):
+    def __init__(self, line: int, col: int):
+        super().__init__(line, col)
+
+    def __repr__(self):
+        return "Null()"
+    

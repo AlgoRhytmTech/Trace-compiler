@@ -11,7 +11,11 @@ KEYWORDS = {
     "input": "INPUT",
     "output": "OUTPUT",
     "fxn": "FUNCTION",
-    "in": "IN"
+    "in": "IN",
+    "true":"TRUE",
+    "false":"FALSE",
+    "null":"NULL"
+
 }
 
 SINGLE_CHAR_TOKENS = {
