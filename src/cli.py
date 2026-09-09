@@ -97,14 +97,14 @@ def main():
 
     if args.check:
         if diagnostics.has_error:
-            diagnostics.print_all()
+            print(diagnostics.format())
             return 1
 
         print("Check passed")
         return 0
 
     if diagnostics.has_error:
-        diagnostics.print_all()
+        print(diagnostics.format())
         return 1
 
     ir = TraceIRLowerer().lower(ast)

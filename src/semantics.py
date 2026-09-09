@@ -1,23 +1,27 @@
 from .ast import *
-from .tokens import Token
-from .semantic.types import Type, TypeKind, INT_TYPE, FLOAT_TYPE, STRING_TYPE, BOOL_TYPE, VOID_TYPE, UNKNOWN_TYPE, BOOL_TYPE, NULL_TYPE
+from .semantic.types import (
+    Type, TypeKind,
+    INT_TYPE, FLOAT_TYPE, STRING_TYPE, BOOL_TYPE,
+    VOID_TYPE, UNKNOWN_TYPE, NULL_TYPE
+)
 from typing import Optional
-from .semantic.diagnostics import Diagnostic, Emitter, SourceLocation
+from .semantic.diagnostics import Emitter, SourceLocation
+
 
 class SymbolInfo:
     def __init__(self, kind: str, type: Type = None,
                  param_count: int = None,
                  function_ast: Optional[FunctionNode] = None):
-        self.kind = kind          # 'variable', 'function', 'parameter', 'builtin'
-        self.type = type          # Type of the variable or function return
-        self.param_count = param_count  # For functions: number of parameters
-        self.function_ast = function_ast  # For function symbols (defining AST node)
-        # For builtins, we might not have type or param_count, but we can set them if known
+        self.kind = kind
+        self.type = type
+        self.param_count = param_count
+        self.function_ast = function_ast
+
 
 class Scope:
     def __init__(self, parent=None):
         self.parent = parent
-        self.symbols = {}  # name -> SymbolInfo
+        self.symbols = {}
 
     def declare(self, name: str, info: SymbolInfo):
         if name in self.symbols:
@@ -32,6 +36,7 @@ class Scope:
             scope = scope.parent
         return None
 
+
 class SemanticAnalyzer:
     def __init__(self, file=""):
         self.global_scope = Scope()
@@ -39,31 +44,32 @@ class SemanticAnalyzer:
         self.current_function = None
         self.file = file
         self.emitter = Emitter()
-        self.node_types = {}  # ASTNode -> Type
+        self.node_types = {}
+        self.current_return_types = []
         self._add_builtins()
 
     def _add_builtins(self):
-        # input: () -> string
         self.global_scope.declare("input", SymbolInfo(
-            kind='builtin',
+            kind="builtin",
             type=STRING_TYPE,
             param_count=0
         ))
-        # output: (any) -> void
+
         self.global_scope.declare("output", SymbolInfo(
-            kind='builtin',
+            kind="builtin",
             type=VOID_TYPE,
             param_count=1
         ))
-        # We'll add range and len as builtins that we don't check thoroughly
+
         self.global_scope.declare("range", SymbolInfo(
-            kind='builtin',
-            type=UNKNOWN_TYPE,  # We don't know the exact type, but we know it's used in for loops
-            param_count=1
+            kind="builtin",
+            type=INT_TYPE,
+            param_count=2
         ))
+
         self.global_scope.declare("len", SymbolInfo(
-            kind='builtin',
-            type=INT_TYPE,  # len returns an integer
+            kind="builtin",
+            type=INT_TYPE,
             param_count=1
         ))
 
@@ -85,256 +91,297 @@ class SemanticAnalyzer:
     def generic_visit(self, node):
         raise SemanticsError(f"Unhandled node {type(node).__name__}")
 
-    # Helper method to check if a type is numeric
-    def _is_numeric(self, type_: Type):
+    def _is_numeric(self, type_):
         return type_.kind in (TypeKind.INT, TypeKind.FLOAT)
 
-    # Helper method to check if a type is string
-    def _is_string(self, type_: Type):
+    def _is_string(self, type_):
         return type_.kind == TypeKind.STRING
 
-    # Helper method to check if a type is boolean
-    def _is_bool(self, type_: Type):
+    def _is_bool(self, type_):
         return type_.kind == TypeKind.BOOL
 
-    # Helper method to check if two types are compatible for assignment
-    # We'll consider them compatible if they are the same, or if we are assigning a numeric to a numeric (int to float or float to int)?
-    # But note: the interpreter does not allow implicit conversion between int and float in arithmetic?
-    # Actually, in the interpreter, if you have an int and a float in an expression, the result is float.
-    # However, for assignment, we are going to require exact match for now to keep it simple.
-    # We can change this later if needed.
-
-    def _types_compatible(self, left: Type, right: Type):
+    def _types_compatible(self, left, right):
+        if left == UNKNOWN_TYPE or right == UNKNOWN_TYPE:
+            return True
         return left == right
 
-    # Helper method to get the type of a binary operation
-    def _binary_op_type(self, op: str, left: Type, right: Type):
-        # First, check if the operation is allowed
+    def _binary_op_type(self, op, left, right):
         allowed, result_type = self._check_binary_op(op, left, right)
+
         if not allowed:
             return None
+
         return result_type
 
-    def _check_binary_op(self, op: str, left: Type, right: Type):
-        # Check if the operation is allowed for the given types
+    def _check_binary_op(self, op, left, right):
+
+        if left == UNKNOWN_TYPE or right == UNKNOWN_TYPE:
+            return True, UNKNOWN_TYPE
+
         if op in ("ADD", "MINUS", "MULTIPLY", "DIVIDE", "MODULO"):
-            # These are arithmetic operations
+
             if self._is_numeric(left) and self._is_numeric(right):
-                # Both are numeric
+
                 if op == "ADD":
-                    # If either is float, result is float
                     if left.kind == TypeKind.FLOAT or right.kind == TypeKind.FLOAT:
                         return True, FLOAT_TYPE
-                    else:
-                        return True, INT_TYPE
-                elif op == "MINUS":
+                    return True, INT_TYPE
+
+                if op == "MINUS":
                     if left.kind == TypeKind.FLOAT or right.kind == TypeKind.FLOAT:
                         return True, FLOAT_TYPE
-                    else:
-                        return True, INT_TYPE
-                elif op == "MULTIPLY":
+                    return True, INT_TYPE
+
+                if op == "MULTIPLY":
                     if left.kind == TypeKind.FLOAT or right.kind == TypeKind.FLOAT:
                         return True, FLOAT_TYPE
-                    else:
-                        return True, INT_TYPE
-                elif op == "DIVIDE":
-                    # Division always returns float
+                    return True, INT_TYPE
+
+                if op == "DIVIDE":
                     return True, FLOAT_TYPE
-                elif op == "MODULO":
-                    # Modulo requires integers
+
+                if op == "MODULO":
                     if left.kind == TypeKind.INT and right.kind == TypeKind.INT:
                         return True, INT_TYPE
-                    else:
-                        return False, None
+                    return False, None
+
             elif op == "ADD" and self._is_string(left) and self._is_string(right):
-                # String concatenation
                 return True, STRING_TYPE
-            elif op == "MULTIPLY" and ((self._is_string(left) and self._is_numeric(right)) or
-                                       (self._is_numeric(left) and self._is_string(right))):
-                # String repetition
+
+            elif op == "MULTIPLY" and (
+                (self._is_string(left) and self._is_numeric(right)) or
+                (self._is_numeric(left) and self._is_string(right))
+            ):
                 return True, STRING_TYPE
-            else:
-                return False, None
-        elif op in ("EQEQ", "NEQ"):
-            # Equality and inequality: any types allowed
-            return True, BOOL_TYPE
-        elif op in ("GT", "LS", "GTEQ", "LSEQ"):
-            # Comparison: only allowed if both are numeric or both are strings
-            if (self._is_numeric(left) and self._is_numeric(right)) or \
-               (self._is_string(left) and self._is_string(right)):
-                return True, BOOL_TYPE
-            else:
-                return False, None
-        elif op in ("AND", "OR", "XOR"):
-            # Logical operations: any types allowed (they are converted to bool)
-            return True, BOOL_TYPE
-        else:
+
             return False, None
 
-    # Helper method to get the type of a unary operation
-    def _unary_op_type(self, op: str, operand: Type):
+        if op in ("EQEQ", "NEQ"):
+            return True, BOOL_TYPE
+
+        if op in ("GT", "LS", "GTEQ", "LSEQ"):
+            if (
+                self._is_numeric(left) and self._is_numeric(right)
+            ) or (
+                self._is_string(left) and self._is_string(right)
+            ):
+                return True, BOOL_TYPE
+
+            return False, None
+
+        if op in ("AND", "OR", "XOR"):
+            return True, BOOL_TYPE
+
+        return False, None
+
+    def _unary_op_type(self, op, operand):
         allowed, result_type = self._check_unary_op(op, operand)
+
         if not allowed:
             return None
+
         return result_type
 
-    def _check_unary_op(self, op: str, operand: Type):
+    def _check_unary_op(self, op, operand):
+
+        if operand == UNKNOWN_TYPE:
+            return True, UNKNOWN_TYPE
+
         if op in ("ADD", "MINUS"):
             if self._is_numeric(operand):
                 if operand.kind == TypeKind.FLOAT:
                     return True, FLOAT_TYPE
-                else:
-                    return True, INT_TYPE
-            else:
-                return False, None
-        elif op == "NOT":
-            # Any type allowed, returns bool
-            return True, BOOL_TYPE
-        else:
+                return True, INT_TYPE
+
             return False, None
 
-    # Expression visitors
+        if op == "NOT":
+            return True, BOOL_TYPE
+
+        return False, None
+
     def visit_ProgramNode(self, node):
         for statement in node.statements:
             self.visit(statement)
 
     def visit_BlockNode(self, node):
         self.push_scope()
+
         for statement in node.statements:
             self.visit(statement)
+
         self.pop_scope()
 
     def visit_LetNode(self, node):
         if node.value is not None:
             self.visit(node.value)
-            # The type of the LetNode is the type of the value
-            self.node_types[node] = self.node_types.get(node.value, UNKNOWN_TYPE)
+            value_type = self.node_types.get(node.value, UNKNOWN_TYPE)
+            self.node_types[node] = value_type
         else:
-            # If no value, we don't know the type yet. We'll mark it as unknown.
-            # When it is assigned later, we will update the variable's type.
+            value_type = UNKNOWN_TYPE
             self.node_types[node] = UNKNOWN_TYPE
-        # Declare the variable in the current scope
-        # We don't know the type yet if there's no value, so we'll use UNKNOWN_TYPE
-        # When we assign to it later, we will update the symbol table.
-        var_type = self.node_types.get(node.value, UNKNOWN_TYPE) if node.value is not None else UNKNOWN_TYPE
-        self.current_scope.declare(node.name, SymbolInfo(
-            kind='variable',
-            type=var_type
-        ))
+
+        self.current_scope.declare(
+            node.name,
+            SymbolInfo(
+                kind="variable",
+                type=value_type
+            )
+        )
 
     def visit_AssignNode(self, node):
+
         if not isinstance(node.target, IdentifierNode):
             self.emitter.error(
                 "Left side must be an identifier",
-                SourceLocation("", node.target.line, node.target.col) if hasattr(node.target, 'line') else SourceLocation("", 0, 0)
+                SourceLocation(
+                    self.file,
+                    getattr(node.target, "line", 0),
+                    getattr(node.target, "col", 0)
+                )
             )
             return
-        # First, visit the value to get its type
+
         self.visit(node.value)
-        value_type = self.node_types.get(node.value, UNKNOWN_TYPE)
-        # Look up the variable in the current scope
+
+        value_type = self.node_types.get(
+            node.value,
+            UNKNOWN_TYPE
+        )
+
         symbol = self.current_scope.lookup(node.target.value)
+
         if symbol is None:
             self.emitter.error(
                 f"Undefined variable '{node.target.value}'",
-                SourceLocation("", node.target.line, node.target.col)
+                SourceLocation(
+                    self.file,
+                    node.target.line,
+                    node.target.col
+                )
             )
             return
-        # Check if the variable's type is compatible with the value's type
+
         if symbol.type == UNKNOWN_TYPE:
-            # We don't know the variable's type yet, so we set it to the value's type
             symbol.type = value_type
+
         elif not self._types_compatible(symbol.type, value_type):
             self.emitter.error(
-                f"Type mismatch: cannot assign {value_type} to variable '{node.target.value}' of type {symbol.type}",
-                SourceLocation("", node.target.line, node.target.col)
+                f"Type mismatch: cannot assign {value_type} "
+                f"to variable '{node.target.value}' "
+                f"of type {symbol.type}",
+                SourceLocation(
+                    self.file,
+                    node.target.line,
+                    node.target.col
+                )
             )
             return
-        # Update the variable's type if we learned something new
-        if symbol.type == UNKNOWN_TYPE:
-            symbol.type = value_type
-        # Store the type of the assignment node (optional)
+
         self.node_types[node] = value_type
 
     def visit_OutputNode(self, node):
         for value in node.values:
             self.visit(value)
-        # Output does not produce a value, so we don't set a type for the node
 
     def visit_ReturnNode(self, node):
+
         if node.value is not None:
             self.visit(node.value)
-            self.node_types[node] = self.node_types.get(node.value, UNKNOWN_TYPE)
+
+            return_type = self.node_types.get(
+                node.value,
+                UNKNOWN_TYPE
+            )
+
+            self.node_types[node] = return_type
+            self.current_return_types.append(return_type)
+
         else:
             self.node_types[node] = VOID_TYPE
+            self.current_return_types.append(VOID_TYPE)
 
     def visit_IfNode(self, node):
         self.visit(node.condition)
-        # Condition can be any type (interpreter converts to bool)
         self.visit(node.body)
+
         for elif_condition, elif_body in node.elifs:
             self.visit(elif_condition)
             self.visit(elif_body)
+
         if node.else_body is not None:
             self.visit(node.else_body)
 
     def visit_WhileNode(self, node):
         self.visit(node.condition)
-        # Condition can be any type
         self.visit(node.body)
 
     def visit_ForNode(self, node):
         self.visit(node.iterable)
-        # The iterable can be any type that is iterable (we don't check)
+
+        loop_type = UNKNOWN_TYPE
+
+        if isinstance(node.iterable, CallNode):
+            if isinstance(node.iterable.callee, IdentifierNode):
+                if node.iterable.callee.value == "range":
+                    loop_type = INT_TYPE
+
         self.push_scope()
-        # The loop variable is a new variable in the loop scope
-        # We don't know its type yet, so we'll mark it as unknown
-        self.current_scope.declare(node.name, SymbolInfo(
-            kind='variable',
-            type=UNKNOWN_TYPE
-        ))
+
+        self.current_scope.declare(
+            node.name,
+            SymbolInfo(
+                kind="variable",
+                type=loop_type
+            )
+        )
+
         self.visit(node.body)
+
         self.pop_scope()
 
     def visit_FunctionNode(self, node):
-        # Declare the function in the current scope
-        # We don't know the return type yet, so we'll use UNKNOWN_TYPE
-        # We also don't know the parameter types, so we'll set them to UNKNOWN_TYPE when we declare them
+
         func_symbol = SymbolInfo(
-            kind='function',
-            type=UNKNOWN_TYPE,  # Return type unknown
+            kind="function",
+            type=UNKNOWN_TYPE,
             param_count=len(node.params),
             function_ast=node
         )
-        self.current_scope.declare(node.name, func_symbol)
+
+        self.current_scope.declare(
+            node.name,
+            func_symbol
+        )
 
         old_function = self.current_function
+        old_return_types = self.current_return_types
+
         self.current_function = node
+        self.current_return_types = []
+
         self.push_scope()
 
-        # Declare the parameters
         for param in node.params:
-            # Parameters are variables in the function scope
-            # We don't know their type yet, so we'll mark them as unknown
-            self.current_scope.declare(param, SymbolInfo(
-                kind='parameter',
-                type=UNKNOWN_TYPE
-            ))
+            self.current_scope.declare(
+                param,
+                SymbolInfo(
+                    kind="parameter",
+                    type=UNKNOWN_TYPE
+                )
+            )
+
         self.visit(node.body)
 
         self.pop_scope()
-        self.current_function = old_function
 
-        # After visiting the body, we might have learned the return type from return statements
-        # But we don't have a way to collect that information easily.
-        # For now, we'll leave the function's return type as UNKNOWN_TYPE.
-        # We could update it by looking at the return statements, but we'll skip that for simplicity.
+        self.current_function = old_function
+        self.current_return_types = old_return_types
 
     def visit_ExprStatementNode(self, node):
         self.visit(node.expr)
 
     def visit_NumberNode(self, node):
-        # Determine if it's int or float
         if isinstance(node.value, float):
             self.node_types[node] = FLOAT_TYPE
         else:
@@ -342,7 +389,7 @@ class SemanticAnalyzer:
 
     def visit_StringNode(self, node):
         self.node_types[node] = STRING_TYPE
-        
+
     def visit_BooleanNode(self, node):
         self.node_types[node] = BOOL_TYPE
 
@@ -350,91 +397,200 @@ class SemanticAnalyzer:
         self.node_types[node] = NULL_TYPE
 
     def visit_IdentifierNode(self, node):
+
         symbol = self.current_scope.lookup(node.value)
+
         if symbol is None:
             self.emitter.error(
                 f"Undefined variable '{node.value}'",
-                SourceLocation("", node.line, node.col)
+                SourceLocation(
+                    self.file,
+                    node.line,
+                    node.col
+                )
             )
+
             self.node_types[node] = UNKNOWN_TYPE
+
         else:
             self.node_types[node] = symbol.type
+
         return self.node_types[node]
 
     def visit_CallNode(self, node):
-        # First, visit the callee to get its symbol (if it's an identifier)
-        self.visit(node.callee)
-        # Check if the callee is an identifier and look it up
-        if isinstance(node.callee, IdentifierNode):
-            symbol = self.current_scope.lookup(node.callee.value)
-            if symbol is None:
-                # Special case for built-in input (we already added it)
-                if node.callee.value == "input":
-                    # We know input is a built-in
-                    symbol = SymbolInfo(
-                        kind='builtin',
-                        type=STRING_TYPE,
-                        param_count=0
-                    )
-                else:
-                    self.emitter.error(
-                        f"Undefined function '{node.callee.value}'",
-                        SourceLocation("", node.callee.line, node.callee.col)
-                    )
-                    self.node_types[node] = UNKNOWN_TYPE
-                    return
-            # Check the number of arguments
-            if symbol.param_count is not None and len(node.args) != symbol.param_count:
-                self.emitter.error(
-                    f"Function '{node.callee.value}' expects {symbol.param_count} arguments but got {len(node.args)}",
-                    SourceLocation("", node.callee.line, node.callee.col)
-                )
-            # We don't check the types of the arguments because we don't have parameter types
-            for arg in node.args:
-                self.visit(arg)
-            # Set the type of the call node
-            if symbol.kind == 'builtin' and symbol.type == STRING_TYPE:
-                # Special case for input
-                self.node_types[node] = symbol.type
-            else:
-                # For user-defined functions, we don't know the return type
-                self.node_types[node] = UNKNOWN_TYPE
-        else:
-            # The callee is an expression (e.g., a function variable)
-            # We don't support function pointers in this language, so we'll treat it as an error
+
+        if not isinstance(node.callee, IdentifierNode):
             self.emitter.error(
                 "Function call expression not supported",
-                SourceLocation("", node.callee.line, node.callee.col)
+                SourceLocation(
+                    self.file,
+                    node.callee.line,
+                    node.callee.col
+                )
             )
+
             self.node_types[node] = UNKNOWN_TYPE
             return
 
+        function_name = node.callee.value
+
+        symbol = self.current_scope.lookup(function_name)
+
+        if symbol is None:
+            self.emitter.error(
+                f"Undefined function '{function_name}'",
+                SourceLocation(
+                    self.file,
+                    node.callee.line,
+                    node.callee.col
+                )
+            )
+
+            self.node_types[node] = UNKNOWN_TYPE
+            return
+
+        if (
+            symbol.param_count is not None
+            and len(node.args) != symbol.param_count
+        ):
+            self.emitter.error(
+                f"Function '{function_name}' expects "
+                f"{symbol.param_count} arguments but got "
+                f"{len(node.args)}",
+                SourceLocation(
+                    self.file,
+                    node.callee.line,
+                    node.callee.col
+                )
+            )
+
+        for arg in node.args:
+            self.visit(arg)
+
+        if symbol.kind == "builtin":
+            self.node_types[node] = symbol.type
+            return
+
+        if symbol.kind != "function" or symbol.function_ast is None:
+            self.node_types[node] = UNKNOWN_TYPE
+            return
+
+        function_node = symbol.function_ast
+
+        old_scope = self.current_scope
+        old_function = self.current_function
+        old_return_types = self.current_return_types
+
+        function_scope = Scope(self.global_scope)
+
+        for i, param in enumerate(function_node.params):
+            param_type = UNKNOWN_TYPE
+
+            if i < len(node.args):
+                param_type = self.node_types.get(
+                    node.args[i],
+                    UNKNOWN_TYPE
+                )
+
+            function_scope.declare(
+                param,
+                SymbolInfo(
+                    kind="parameter",
+                    type=param_type
+                )
+            )
+
+        self.current_scope = function_scope
+        self.current_function = function_node
+        self.current_return_types = []
+
+        self.visit(function_node.body)
+
+        return_types = self.current_return_types[:]
+
+        self.current_scope = old_scope
+        self.current_function = old_function
+        self.current_return_types = old_return_types
+
+        if return_types:
+            result_type = return_types[0]
+
+            for return_type in return_types[1:]:
+                if return_type != result_type:
+                    result_type = UNKNOWN_TYPE
+                    break
+
+            symbol.type = result_type
+            self.node_types[node] = result_type
+
+        else:
+            symbol.type = VOID_TYPE
+            self.node_types[node] = VOID_TYPE
+
     def visit_BinaryOpNode(self, node):
+
         self.visit(node.left)
         self.visit(node.right)
-        left_type = self.node_types.get(node.left, UNKNOWN_TYPE)
-        right_type = self.node_types.get(node.right, UNKNOWN_TYPE)
-        result_type = self._binary_op_type(node.op, left_type, right_type)
+
+        left_type = self.node_types.get(
+            node.left,
+            UNKNOWN_TYPE
+        )
+
+        right_type = self.node_types.get(
+            node.right,
+            UNKNOWN_TYPE
+        )
+
+        result_type = self._binary_op_type(
+            node.op,
+            left_type,
+            right_type
+        )
+
         if result_type is None:
             self.emitter.error(
-                f"Unsupported operation '{node.op}' between types '{left_type}' and '{right_type}'",
-                SourceLocation("", node.line, node.col)
+                f"Unsupported operation '{node.op}' "
+                f"between types '{left_type}' "
+                f"and '{right_type}'",
+                SourceLocation(
+                    self.file,
+                    node.line,
+                    node.col
+                )
             )
+
             self.node_types[node] = UNKNOWN_TYPE
+
         else:
             self.node_types[node] = result_type
 
     def visit_UnaryOpNode(self, node):
+
         self.visit(node.right)
-        operand_type = self.node_types.get(node.right, UNKNOWN_TYPE)
-        result_type = self._unary_op_type(node.op, operand_type)
+
+        operand_type = self.node_types.get(
+            node.right,
+            UNKNOWN_TYPE
+        )
+
+        result_type = self._unary_op_type(
+            node.op,
+            operand_type
+        )
+
         if result_type is None:
             self.emitter.error(
-                f"Unsupported unary operation '{node.op}' on type '{operand_type}'",
-                SourceLocation("", node.line, node.col)
+                f"Unsupported unary operation '{node.op}' "
+                f"on type '{operand_type}'",
+                SourceLocation(
+                    self.file,
+                    node.line,
+                    node.col
+                )
             )
+
             self.node_types[node] = UNKNOWN_TYPE
+
         else:
             self.node_types[node] = result_type
-
-# End of file

@@ -1,12 +1,4 @@
-output(true);
-output(false);
+output("how are you: F/N ");
+let x = input();
 
-let x = true;
-output(!x);
-
-output(true == false);
-output(true != false);
-
-if (x) {
-    output("yes");
-}
+output(x);
