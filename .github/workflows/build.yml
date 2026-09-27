@@ -1,10 +1,13 @@
-name: Build TRACE
+name: Build and Release TRACE
 
 on:
   push:
     tags:
       - "v*"
   workflow_dispatch:
+
+permissions:
+  contents: write
 
 jobs:
   build:
@@ -14,7 +17,7 @@ jobs:
           - os: ubuntu-latest
             name: trace-linux-x86_64
           - os: windows-latest
-            name: trace-windows-x86_64
+            name: trace-windows-x86_64.exe
           - os: macos-14
             name: trace-macos-arm64
 
@@ -43,4 +46,23 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.name }}
-          path: dist/${{ matrix.name }}*
+          path: dist/${{ matrix.name }}
+
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Download binaries
+        uses: actions/download-artifact@v4
+        with:
+          path: release
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            release/trace-linux-x86_64/trace-linux-x86_64
+            release/trace-windows-x86_64.exe/trace-windows-x86_64.exe
+            release/trace-macos-arm64/trace-macos-arm64
+          generate_release_notes: true
